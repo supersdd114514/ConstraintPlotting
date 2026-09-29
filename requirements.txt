@@ -1,0 +1,7 @@
+# 运行依赖
+# 安装：python -m venv .venv; .venv\Scripts\Activate.ps1; pip install -r requirements.txt
+# 版本下限为已在 Python 3.14 / Windows 上验证通过的版本。
+
+numpy>=2.5,<3          # 向量化计算与网格求交
+matplotlib>=3.11,<4    # 可行域绘图（需要支持中文的字体，Windows 用「微软雅黑」）
+scipy>=1.18,<2         # 后续用于设计点优化、曲线求根等
