@@ -84,7 +84,15 @@ def plot_region(
     tw_grid = region.tw_grid
     ws2d, tw2d = np.meshgrid(ws_grid, tw_grid)
 
-    fig, ax = plt.subplots(figsize=(11.0, 7.0), constrained_layout=True)
+    # 引文区布局：约束变多后单列会溢出，改为多列并预留底部空间
+    traces_sorted = sorted(region.traces, key=lambda t: t.key)
+    n_cite = len(traces_sorted)
+    n_cols = 2 if n_cite > 6 else 1
+    cite_rows = -(-n_cite // n_cols)
+    line_step = 0.0175
+    bottom = 0.085 + line_step * cite_rows
+
+    fig, ax = plt.subplots(figsize=(11.5, 7.6))
 
     # ---- 可行域填充 ----
     if not region.is_empty:
@@ -155,18 +163,24 @@ def plot_region(
             fontsize=20, color=_CURVE_COLOR, fontweight="bold", alpha=0.85,
         )
 
-    ax.legend(loc="best", fontsize=8.5, framealpha=0.93)
+    ax.legend(loc="best", fontsize=8.2, framealpha=0.93)
 
-    # ---- 公式出处（可溯源） ----
-    citations = "\n".join(
-        f"· {t.meta.name_cn}：{t.meta.reference}"
-        for t in sorted(region.traces, key=lambda x: x.key)
-    )
+    # ---- 公式出处（可溯源）----
+    # 只展示第一出处，完整引用（含交叉验证来源）见模型文件的 docstring
+    fig.subplots_adjust(left=0.075, right=0.985, top=0.845, bottom=bottom)
     fig.text(
-        0.01, 0.005,
-        "公式出处：\n" + citations,
-        fontsize=6.6, color="#555555", va="bottom", ha="left",
+        0.075, bottom - 0.020, "公式出处：",
+        fontsize=7.2, color="#333333", va="top", ha="left", fontweight="bold",
     )
+    for idx, trace in enumerate(traces_sorted):
+        col, row = divmod(idx, cite_rows)
+        primary = trace.meta.reference.split("；")[0]
+        fig.text(
+            0.075 + col * 0.465,
+            bottom - 0.042 - row * line_step,
+            f"· {trace.meta.name_cn}：{primary}",
+            fontsize=6.3, color="#555555", va="top", ha="left",
+        )
 
     target = Path(output_path)
     target.parent.mkdir(parents=True, exist_ok=True)

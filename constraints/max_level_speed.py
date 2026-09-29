@@ -1,25 +1,34 @@
 """最大平飞速度约束。
 
-**公式出处**：李为吉《飞机总体设计》第 2 章 2.4 节，式(2.29)~(2.31)，印刷页 21。
+**公式出处**
 
-原式：
+- 刘虎 等《飞机总体设计》第 3 章 3.3 节，式(3.24)，印刷页 41
+  （主管方程 (3.15) 取 ``dh/dt = 0, dV/dt = 0, n = 1, R = 0``）
+- 李为吉《飞机总体设计》第 2 章 2.4 节，式(2.31)，印刷页 21
 
-    T/W = ½ ρ v_max² C_D / (W/S)          (2.31)
+原式（刘虎 3.24）：
 
-其中由 ``v_max = √(2(T/W)(W/S)/(ρ C_D))``  (2.30) 反解而来。
+    F0/(m0 g) = (β/α)·{ K1·(βg/q)(m0/S) + K2 + C_D0/((βg/q)(m0/S)) }
 
-**注意**：这是书中给出的**简化形式** —— 阻力系数 C_D 取单一值（由参数
-``cd_max_level_speed`` 提供），未显式拆分零升阻力与诱导阻力。若需要更精细的
-极曲线形式，应另建模型并注明推导出处。
+**两书公式等价 —— 已交叉验证**：把完整极曲线 ``C_D = C_D0 + K1·C_L²``（K2=0）
+代入李为吉式(2.31)的 ``T/W = ½ρV²·C_D/(W/S)``，令 ``w = W/S``、``C_L = w/q``：
 
-曲线形态：对 W/S **单调递减** —— 翼载越大意味着同样总重下机翼越小、高速阻力越小。
+    D/W = q·C_D/w = q·C_D0/w + K1·w/q
+
+正是刘虎式(3.24)。差别仅在于李为吉把 ``C_D`` 写成了一个代数量。
+
+**本模型采用刘虎的分离写法**（显式区分 C_D0 与诱导阻力），因此曲线存在
+**特征极小值**（对应最佳翼载），而合并写法会退化成单调递减的双曲线。
+
+**α 的影响**：推力比 ``alpha_max_speed`` 把高速巡航时的推力衰减计入，
+使所需起飞推重比显著高于瞬时需用值（高速时安装推力远小于海平面静推力）。
 """
 
 from __future__ import annotations
 
 import numpy as np
 
-from core.numeric import ignore_divide_warnings
+from core.aero import induced_drag_factor, required_thrust_weight
 from core.units import dynamic_pressure, isa_density
 
 from .base import ConstraintKind, ConstraintMeta, register_constraint
@@ -32,8 +41,17 @@ from .base import ConstraintKind, ConstraintMeta, register_constraint
         category="速度",
         sense=">=",
         kind=ConstraintKind.CURVE,
-        requires=("max_level_speed", "altitude_max_speed", "cd_max_level_speed"),
-        reference="李为吉《飞机总体设计》2.4 节 式(2.31)，印刷页 21",
+        requires=(
+            "max_level_speed",
+            "altitude_max_speed",
+            "cd0_clean",
+            "aspect_ratio",
+            "oswald_e",
+            "polar_k2",
+            "beta_max_speed",
+            "alpha_max_speed",
+        ),
+        reference="刘虎《飞机总体设计》3.3 节 式(3.24)，印刷页 41；亦见李为吉 2.4 节 式(2.31)，印刷页 21",
     )
 )
 def compute(params, ws: np.ndarray) -> np.ndarray:
@@ -44,11 +62,21 @@ def compute(params, ws: np.ndarray) -> np.ndarray:
         ws: 翼载数组，N/m²。
 
     Returns:
-        所需 T/W 数组。W/S → 0 时发散（``+inf``），由 `core.analyzer` 截断处理。
+        所需 T/W 数组。曲线呈碗形，极小值对应最省推力的翼载。
     """
     density = float(isa_density(params.altitude_max_speed))
     q = float(dynamic_pressure(density, params.max_level_speed))
+    k1 = float(induced_drag_factor(params.aspect_ratio, params.oswald_e))
 
-    ws = np.asarray(ws, dtype=float)
-    with ignore_divide_warnings():
-        return q * params.cd_max_level_speed / ws
+    return np.asarray(
+        required_thrust_weight(
+            wing_loading=ws,
+            dynamic_pressure=q,
+            cd0=params.cd0_clean,
+            k1=k1,
+            k2=params.polar_k2,
+            load_factor=1.0,
+            beta=params.beta_max_speed,
+            alpha=params.alpha_max_speed,
+        )
+    )

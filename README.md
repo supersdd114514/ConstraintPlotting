@@ -119,7 +119,7 @@ python main.py
 | `aspect_ratio` | — | 机翼展弦比 A | 运输机 7~10 |
 | `oswald_e` | — | 奥斯瓦尔德效率因子 e | 战斗机 ≈0.6；其他 ≈0.8 |
 | `cd0_clean` | — | 巡航构型零升阻力系数 C_D0 | 喷气机 ≈0.015；螺旋桨机 ≈0.020 |
-| `cd_max_level_speed` | — | 最大平飞速度状态的阻力系数 C_D | 由极曲线估算 |
+| `polar_k2` | — | 极曲线一次项系数 K2 | 初步分析取 0 |
 | `cl_max_takeoff` | — | 起飞构型最大升力系数 | 1.6~2.0 |
 | `cl_max_landing` | — | 着陆构型最大升力系数 | 带襟翼+前缘缝翼运输机 ≈2.4 |
 | `ld_takeoff` | — | 起飞滑跑状态升阻比 L/D | 亚音速 8~10；超音速 5~6 |
@@ -170,6 +170,48 @@ python main.py
 | `ceiling_speed` | m/s | 升限处飞行速度 v_a |
 | `cl_ceiling` | — | 升限飞行时的升力系数 C_L |
 
+#### 爬升率约束
+
+| 字段 | 单位 | 含义 |
+| --- | --- | --- |
+| `climb_rate` | m/s | 要求达到的爬升率 dh/dt |
+| `climb_altitude` | m | 考核高度 |
+| `climb_speed` | m/s | 考核速度 V |
+
+#### 水平加减速约束
+
+| 字段 | 单位 | 含义 |
+| --- | --- | --- |
+| `acceleration_speed_initial` | m/s | 加减速起始速度 |
+| `acceleration_speed_final` | m/s | 加减速终止速度 |
+| `acceleration_allowable_time` | s | 允许的加减速时间 Δt |
+| `acceleration_altitude` | m | 考核高度 |
+
+#### 着陆滑跑距离约束
+
+| 字段 | 单位 | 含义 | 典型值 |
+| --- | --- | --- | --- |
+| `landing_ground_run` | m | 着陆地面滑跑距离 x_LGR | 由任务要求给出 |
+| `landing_friction_mu` | — | 着陆摩擦阻力系数 μ | 0.2~0.3，无数据取 0.25 |
+| `touchdown_speed_factor` | — | 接地安全速度系数 k_TD | 1.25~1.30 |
+
+#### 推力比 α 与瞬时重量比 β
+
+`α` = 该状态安装推力 / 海平面静推力；`β` = 该状态重量 / 起飞重量。两者按**飞行工况分别设置**：
+
+| 字段 | 工况 | 默认值 |
+| --- | --- | --- |
+| `alpha_max_speed` / `beta_max_speed` | 最大平飞速度 | 0.28 / 0.92 |
+| `alpha_climb` / `beta_climb` | 爬升 | 0.49 / 0.96 |
+| `alpha_acceleration` / `beta_acceleration` | 水平加减速 | 0.47 / 0.94 |
+| `alpha_turn` / `beta_turn` | 持续盘旋 | 0.49 / 0.85 |
+| `beta_landing` | 着陆 | 0.70 |
+
+> ⚠️ **α 不是常数**：它由高度、速度、发动机类型共同决定。改动某个约束的
+> `*_altitude` / `*_speed` 后**必须同步重算对应的 α**，否则该约束会被悄悄错估。
+> 高涵道比涡扇可用 `core.aero.thrust_lapse_high_bypass_turbofan`（刘虎 式 3.38）计算，
+> 其他发动机见式(3.39)~(3.44)。
+>
 > ⚠️ **单位陷阱 —— 本项目最容易出错的地方**
 >
 > 参考文献（李为吉《飞机总体设计》表 2.9）中的翼载以 **9.8 N/m²（即 kgf/m²）** 为单位，
@@ -273,18 +315,56 @@ python main.py --tw-max 0.2
 
 ## 6. 已实现的约束
 
-全部公式出自 **李为吉《飞机总体设计》第 2 章 2.4 节「确定推重比和翼载」，印刷页 17–25**。
-每个模型文件的 docstring 里都保留了公式的原始形式与单位换算说明。
+公式取自两本《飞机总体设计》，每个模型文件的 docstring 里都保留了原始形式与单位换算说明。
 
-| 约束 | 模型文件 | `kind` | `sense` | 式号 | 印刷页 |
+| 约束 | 模型文件 | `kind` | `sense` | 出处 | 印刷页 |
 | --- | --- | --- | --- | --- | --- |
-| 起飞滑跑距离 | `takeoff_ground_run.py` | `curve` | `>=` | 2.27 | 20 |
-| 最大平飞速度 | `max_level_speed.py` | `curve` | `>=` | 2.31 | 21 |
-| 爬升梯度 | `climb_gradient.py` | `horizontal` | `>=` | 2.24 | 19 |
-| 巡航平飞 | `cruise_level_flight.py` | `horizontal` | `>=` | 2.23 | 18 |
-| 失速速度 | `stall_speed.py` | `vertical` | `<=` | 2.33 | 22 |
-| 机动过载 | `maneuver_load_factor.py` | `vertical` | `<=` | 2.36 | 23 |
-| 升限 | `service_ceiling.py` | `vertical` | `<=` | 2.37 | 24 |
+| 起飞滑跑距离 | `takeoff_ground_run.py` | `curve` | `>=` | 李为吉 式(2.27) | 20 |
+| 爬升梯度 | `climb_gradient.py` | `horizontal` | `>=` | 李为吉 式(2.24) | 19 |
+| 巡航平飞 | `cruise_level_flight.py` | `horizontal` | `>=` | 李为吉 式(2.23) | 18 |
+| 失速速度 | `stall_speed.py` | `vertical` | `<=` | 李为吉 式(2.33) | 22 |
+| 机动过载（气动限制） | `maneuver_load_factor.py` | `vertical` | `<=` | 李为吉 式(2.36) | 23 |
+| 升限 | `service_ceiling.py` | `vertical` | `<=` | 李为吉 式(2.37) | 24 |
+| 最大平飞速度 | `max_level_speed.py` | `curve` | `>=` | 刘虎 式(3.24) | 41 |
+| 爬升率 | `climb_rate.py` | `curve` | `>=` | 刘虎 式(3.23) | 41 |
+| 水平加减速 | `level_acceleration.py` | `curve` | `>=` | 刘虎 式(3.25)(3.26) | 41 |
+| 持续盘旋过载 | `sustained_turn.py` | `curve` | `>=` | 刘虎 式(3.27) | 41 |
+| 着陆滑跑距离 | `landing_ground_run.py` | `vertical` | `<=` | 刘虎 式(3.34) | 42 |
+
+### 两本书是什么关系？——已数值交叉验证
+
+两书**不是相互矛盾，而是同一物理的不同写法**，本项目同时保留：
+
+| 交叉验证结论 | 实测偏差 |
+| --- | --- |
+| 李为吉爬升式(2.24) 水平线 = 刘虎爬升式(3.23) 对 $C_L$ 取极小 | $7.6\times10^{-12}$ |
+| 李为吉最大速度式(2.31) 合并 $C_D$ = 刘虎式(3.24) 极曲线分离式 | $3.9\times10^{-16}$ |
+| 起飞滑跑距离项：李为吉系数 1.2 vs 刘虎 $k_{TO}^2/\rho$ | 2.08% |
+
+具体地说：
+
+- **爬升**：李为吉 $T/W \ge G + 2\sqrt{C_{D0}/(\pi A e)}$ 是刘虎爬升曲线对 $C_L$ 取极小的结果，
+  给出**最保守的水平下界**；刘虎给的是**指定速度下的真实曲线**。两者分别对应“爬升梯度”
+  与“爬升率”两类指标，因此 `climb_gradient` 与 `climb_rate` 同时保留。
+- **最大速度**：把极曲线代入李为吉的 $T/W = \frac{1}{2}\rho V^2 C_D/(W/S)$ 就得到刘虎的式子。
+  本项目采用刘虎的分离写法（显式区分 $C_{D0}$ 与诱导阻力），**曲线因此存在特征极小值**，
+  而合并写法会退化成单调递减的双曲线。
+- **机动**：`maneuver_load_factor`（李为吉）管“机翼够不够大”（升力限制），
+  `sustained_turn`（刘虎）管“发动机够不够强”（推力限制），**两者互补，必须同时满足**。
+
+### 统一的主管方程
+
+刘虎把全部约束统一成一个从能量方程推出的**主管方程**（式 3.15），代码实现在
+`core.aero.required_thrust_weight`：
+
+```text
+F0/(m0 g) = (β/α) · { K1·n²·CL + K2·n + CD0/CL + dh/dt / V + (dV/dt)/g }
+CL = n·β·(W/S)/q
+```
+
+每条约束只是它的一个特例：最大平飞速度 ``n=1, ḣ=0, V̇=0``；爬升率 ``n=1, ḣ=ROC``；
+水平加减速 ``n=1, V̇≠0``；持续盘旋 ``n>1``。**新增曲线型约束请优先调用这个函数**，
+这样物理假设会显式出现在调用处，可审查、可比对。
 
 **方向判据**：书中的选取规则是「推重比取各准则所得值的**最大值**，翼载取各准则所得值的**最小值**」。
 因此 **所有 T/W 类约束的 `sense` 都是 `>=`，所有 W/S 类约束的 `sense` 都是 `<=`**。
@@ -360,6 +440,64 @@ def compute(params, ws: np.ndarray) -> float:
 随后在 `config/params.py` 的 `DesignParams` 里补上 `cruise_altitude: float = 11_000.0`（巡航高度，m），
 运行 `python main.py`，新约束就会自动出现在终端列表、图例和可行域求交中。
 
+### 曲线型约束：请用统一的主管方程
+
+若新约束的 T/W 随翼载变化（`kind=curve`），**不要自己另起炉灶推导**，直接调用
+`core.aero.required_thrust_weight`（刘虎主管方程 式 3.15）。这样过载、爬升率、加速度
+等物理假设会**显式出现在调用处**，可审查、可比对：
+
+```python
+# constraints/supersonic_cruise.py
+"""超声速巡航约束。
+
+公式出处：刘虎《飞机总体设计》3.3 节 式(3.24)，印刷页 41
+（主管方程取 n=1, ḣ=0, V̇=0, R=0）。
+"""
+
+from __future__ import annotations
+
+import numpy as np
+
+from core.aero import induced_drag_factor, required_thrust_weight
+from core.units import dynamic_pressure, isa_density
+
+from .base import ConstraintKind, ConstraintMeta, register_constraint
+
+
+@register_constraint(
+    ConstraintMeta(
+        key="supersonic_cruise",
+        name_cn="超声速巡航约束",
+        category="巡航",
+        sense=">=",
+        kind=ConstraintKind.CURVE,
+        requires=(
+            "cruise_speed", "cruise_altitude", "cd0_clean", "aspect_ratio",
+            "oswald_e", "polar_k2", "beta_max_speed", "alpha_max_speed",
+        ),
+        reference="刘虎《飞机总体设计》3.3 节 式(3.24)，印刷页 41",
+    )
+)
+def compute(params, ws: np.ndarray) -> np.ndarray:
+    """给定翼载，返回超声速巡航所需的推重比下限。"""
+    density = float(isa_density(params.cruise_altitude))
+    q = float(dynamic_pressure(density, params.cruise_speed))
+    k1 = float(induced_drag_factor(params.aspect_ratio, params.oswald_e))
+
+    return np.asarray(
+        required_thrust_weight(
+            wing_loading=ws,
+            dynamic_pressure=q,
+            cd0=params.cd0_clean,
+            k1=k1,
+            k2=params.polar_k2,
+            load_factor=1.0,
+            beta=params.beta_max_speed,
+            alpha=params.alpha_max_speed,
+        )
+    )
+```
+
 ### 编写要点
 
 - **全 numpy 向量化**：`ws` 是数组，返回值形状必须一致，不要用 Python 循环逐点算
@@ -386,6 +524,7 @@ constraints/                     约束曲线模型库 —— 面向使用者的
   <约束名>.py                    每个约束一个文件，文件名 = key 的 snake_case
 core/                            与具体约束无关的算法（纯计算，不做 I/O）
   units.py                       单位换算 + 国际标准大气 ISA
+  aero.py                        极曲线 + 约束分析主管方程（刘虎 式 3.15）
   numeric.py                     数值保护：清理 inf/nan
   validator.py                   缺参预检
   analyzer.py                    求交、可行域提取、诊断报告
