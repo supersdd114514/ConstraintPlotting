@@ -20,6 +20,8 @@ _CURVE_COLOR = "#D32F2F"
 _VERTICAL_COLOR = "#1976D2"
 _HORIZONTAL_COLOR = "#7B1FA2"
 _POINT_COLOR = "#FF6F00"
+_DESIGN_COLOR = "#0D47A1"       # 当前设计点落在可行域内
+_VIOLATION_COLOR = "#C62828"    # 当前设计点不满足部分约束
 
 _CJK_FONTS = (
     "Microsoft YaHei",
@@ -141,6 +143,31 @@ def plot_region(
             markeredgecolor="white", markeredgewidth=1.2, zorder=6,
             label=f"推荐设计点 W/S={ws_p:.0f}, T/W={tw_p:.3f}",
         )
+
+    # ---- 当前设计点（由 takeoff_weight / wing_area / takeoff_thrust 定位）----
+    current = region.current_design_point
+    if current is not None:
+        ws_c, tw_c = current
+        feasible = region.evaluate_point(ws_c, tw_c).feasible
+        inside = (
+            ws_grid[0] <= ws_c <= ws_grid[-1] and tw_grid[0] <= tw_c <= tw_grid[-1]
+        )
+        if inside:
+            ax.plot(
+                ws_c, tw_c, marker="o", markersize=11,
+                color=_DESIGN_COLOR if feasible else _VIOLATION_COLOR,
+                markeredgecolor="white", markeredgewidth=1.4, zorder=7,
+                label=("当前设计点" if feasible else "当前设计点（不满足约束）")
+                + f" W/S={ws_c:.0f}, T/W={tw_c:.3f}",
+            )
+        else:
+            ax.text(
+                0.985, 0.028,
+                f"当前设计点 W/S={ws_c:.0f}, T/W={tw_c:.3f}\n超出绘图窗口范围",
+                transform=ax.transAxes, ha="right", va="bottom", fontsize=8.5,
+                color=_VIOLATION_COLOR,
+                bbox=dict(boxstyle="round", fc="white", ec=_VIOLATION_COLOR, alpha=0.92),
+            )
 
     # ---- 坐标轴 ----
     ax.set_xlim(ws_grid[0], ws_grid[-1])

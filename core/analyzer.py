@@ -61,6 +61,16 @@ class ConstraintTrace:
 
 
 @dataclass
+class PointEvaluation:
+    """对平面上某一点的设计校核结果。"""
+
+    ws: float
+    tw: float
+    feasible: bool
+    violated: list[str]          # 未满足的约束 key
+
+
+@dataclass
 class FeasibleRegion:
     """设计可行域。"""
 
@@ -105,6 +115,83 @@ class FeasibleRegion:
         col = int(np.flatnonzero(self.mask[row]).max())
         return float(self.ws_grid[col]), float(self.tw_grid[row])
 
+    @property
+    def current_design_point(self) -> tuple[float, float] | None:
+        """用户当前设计在 (W/S, T/W) 平面上的位置。
+
+        由 ``takeoff_weight``、``wing_area``、``takeoff_thrust`` 三个参数确定。
+        缺任一参数则返回 None。
+
+        注意：可行域本身与总重**无关**，改动总重只会移动本点，
+        不会改变可行域 —— 这是约束分析的固有性质，不是缺陷。
+        """
+        if self.params is None:
+            return None
+
+        weight = getattr(self.params, "takeoff_weight", None)
+        area = getattr(self.params, "wing_area", None)
+        thrust = getattr(self.params, "takeoff_thrust", None)
+        if not weight or not area or not thrust:
+            return None
+        if weight <= 0.0 or area <= 0.0:
+            return None
+
+        return float(weight / area), float(thrust / weight)
+
+    def evaluate_point(self, ws: float, tw: float) -> PointEvaluation:
+        """校核平面上任意一点，列出它未满足的约束。
+
+        Args:
+            ws: 翼载, N/m²。
+            tw: 推重比。
+
+        Returns:
+            `PointEvaluation`。
+        """
+        violated: list[str] = []
+
+        for trace in self.traces:
+            if trace.kind is ConstraintKind.CURVE:
+                required = float(np.interp(ws, trace.ws, trace.curve))
+                if not np.isfinite(required):
+                    violated.append(trace.key)
+                    continue
+                ok = (
+                    tw >= required
+                    if trace.sense is Sense.GE
+                    else tw <= required
+                )
+            elif trace.kind is ConstraintKind.VERTICAL:
+                ok = (
+                    ws <= trace.ws_bound
+                    if trace.sense is Sense.LE
+                    else ws >= trace.ws_bound
+                )
+            else:
+                ok = (
+                    tw >= trace.tw_bound
+                    if trace.sense is Sense.GE
+                    else tw <= trace.tw_bound
+                )
+
+            if not ok:
+                violated.append(trace.key)
+
+        return PointEvaluation(ws=ws, tw=tw, feasible=not violated, violated=violated)
+
+    def sizing_at(self, ws: float, tw: float) -> tuple[float, float] | None:
+        """把可行域上的一点折算成具体的机翼面积与推力。
+
+        Returns:
+            ``(机翼面积 S / m², 海平面静推力 F0 / N)``；缺总重参数时返回 None。
+        """
+        if self.params is None:
+            return None
+        weight = getattr(self.params, "takeoff_weight", None)
+        if not weight or weight <= 0.0 or ws <= 0.0:
+            return None
+        return float(weight / ws), float(weight * tw)
+
     def describe(self) -> str:
         """生成人类可读的结论摘要。"""
         from .units import wing_loading_n_to_kg
@@ -148,6 +235,44 @@ class FeasibleRegion:
                 f"  推荐设计点（T/W 最小）：W/S = {ws:.0f} N/m²"
                 f"（{wing_loading_n_to_kg(ws):.1f} kg/m²），T/W = {tw:.3f}"
             )
+            sizing = self.sizing_at(ws, tw)
+            if sizing is not None:
+                area, thrust = sizing
+                lines.append(
+                    f"      折算到起飞重量 → 机翼面积 S = {area:.1f} m²，"
+                    f"需海平面静推力 F0 = {thrust:,.0f} N"
+                )
+
+        current = self.current_design_point
+        if current is not None:
+            ws_c, tw_c = current
+            evaluation = self.evaluate_point(ws_c, tw_c)
+            weight = float(getattr(self.params, "takeoff_weight", 0.0))
+            area = float(getattr(self.params, "wing_area", 0.0))
+            lines.append("")
+            lines.append(
+                f"  当前设计点：W/S = {ws_c:.0f} N/m²"
+                f"（起飞重量 {weight:,.0f} N ÷ 机翼面积 {area:.1f} m²）"
+                f"，T/W = {tw_c:.3f}  —— "
+                + ("在可行域内" if evaluation.feasible else "不在可行域内")
+            )
+            if evaluation.violated:
+                names = [
+                    t.meta.name_cn for t in self.traces if t.key in evaluation.violated
+                ]
+                lines.append(
+                    f"      未满足的约束（{len(names)} 条）：{'、'.join(names)}"
+                )
+            else:
+                lines.append("      全部约束均满足")
+
+        lines.append("")
+        lines.append(
+            "  注：可行域只取决于 W/S 与 T/W，与总重**无关**。改动起飞重量 /"
+        )
+        lines.append(
+            "      机翼面积只会移动「当前设计点」，不会改变可行域本身。"
+        )
 
         lines.append("")
         lines.append("参与求交的约束（按单独可行面积占比升序，越靠前越是瓶颈）：")
