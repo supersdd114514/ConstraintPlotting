@@ -175,9 +175,18 @@ def plot_region(
     ax.set_xlabel("翼载 W/S  (N/m²)")
     ax.set_ylabel("推重比 T/W")
 
-    # 顶部附加 kg/m² 刻度 —— 主动提醒两个单位差 9.8 倍
+    # 顶部附加 kg/m² 刻度。
+    # 关键：副轴刻度必须**严格落在主轴刻度的换算值上**。
+    # 若放任 matplotlib 各自挑选“圆整”刻度，会出现 5000 N/m² 对上 500 kg/m² 的
+    # 错位（真值是 509.9），不仅两套刻度互相矛盾，还会误导读者按 10 倍而非
+    # 9.80665 倍换算，读数系统性偏差约 2%。
+    primary_ticks = np.asarray(ax.get_xticks(), dtype=float)
+    converted = np.asarray(wing_loading_n_to_kg(primary_ticks), dtype=float)
+
     secax = ax.secondary_xaxis("top", functions=(wing_loading_n_to_kg, lambda v: v * G0))
-    secax.set_xlabel("翼载 W/S  (kg/m²)")
+    secax.set_xticks(converted)
+    secax.set_xticklabels([f"{value:.0f}" for value in converted])
+    secax.set_xlabel(f"翼载 W/S  (kg/m²)　＝ N/m² ÷ {G0}")
 
     ax.set_title(title, fontsize=14, pad=38, fontweight="bold")
     ax.grid(alpha=0.3, linestyle=":", linewidth=0.8, zorder=0)

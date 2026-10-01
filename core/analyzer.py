@@ -252,7 +252,8 @@ class FeasibleRegion:
             lines.append("")
             lines.append(
                 f"  当前设计点：W/S = {ws_c:.0f} N/m²"
-                f"（起飞重量 {weight:,.0f} N ÷ 机翼面积 {area:.1f} m²）"
+                f"（{wing_loading_n_to_kg(ws_c):.0f} kg/m²，"
+                f"= 起飞重量 {weight:,.0f} N ÷ 机翼面积 {area:.1f} m²）"
                 f"，T/W = {tw_c:.3f}  —— "
                 + ("在可行域内" if evaluation.feasible else "不在可行域内")
             )
@@ -280,9 +281,20 @@ class FeasibleRegion:
             flag = ""
             if t.nan_count:
                 flag = f"  [含 {t.nan_count} 个无定义点]"
+            # 翼载限值同时给出两种单位，避免读者自行换算时误用 10 倍因子
+            detail = ""
+            if t.kind is ConstraintKind.VERTICAL and t.ws_bound is not None:
+                relation = "≤" if t.sense is Sense.LE else "≥"
+                detail = (
+                    f"  W/S {relation} {t.ws_bound:.0f} N/m²"
+                    f"（{wing_loading_n_to_kg(t.ws_bound):.0f} kg/m²）"
+                )
+            elif t.kind is ConstraintKind.HORIZONTAL and t.tw_bound is not None:
+                relation = "≥" if t.sense is Sense.GE else "≤"
+                detail = f"  T/W {relation} {t.tw_bound:.3f}"
             lines.append(
                 f"  {t.feasible_fraction:6.1%}  {t.meta.name_cn}"
-                f"（{t.key}, {t.kind.value}, {t.sense.value}）{flag}"
+                f"（{t.key}, {t.kind.value}, {t.sense.value}）{flag}{detail}"
             )
             lines.append(f"          出处：{t.meta.reference}")
         return "\n".join(lines)

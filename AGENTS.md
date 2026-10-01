@@ -128,6 +128,9 @@ python main.py --tw-max 0.8 -o output/low_tw.png    # 收窄推重比绘图窗�
   “改总重但图不变”就会变成看起来像故障的行为（本项目已实际踩过此坑）。总重的正确用途
   是定位「当前设计点」与折算机翼面积、推力，见 `FeasibleRegion.current_design_point`。
 - **在模型文件里做单位换算**：换算逻辑应集中在 `core/units.py`，散落会难以审计。
+- **双横轴各自挑“圆整”刻度，造成单位矛盾**：`secondary_xaxis` 默认让两个轴**独立**选取刻度，
+  于是 1000 N/m² 会配上 100 kg/m²（真值 102.0）——既错位又暗示读者按 10 倍而非 9.80665 倍换算，
+  读数系统性偏 2%。必须用 `secax.set_xticks(主轴刻度 ÷ G0)` 强制对齐，见 `plotting/plot_region.py`。
 - **模型返回 `nan` 时当作可行**：`nan` 表示公式**无定义**，必须判为不可行；只有 `inf` 才可截断到硬上限。两者语义不同，不可混为一谈。
 - **中文 Windows 控制台编码**：`N/m²` 的 `²` 在 cp936 下无法编码，会让 `print` 抛 `UnicodeEncodeError` 中断程序。`main.py` 已用 `reconfigure(errors="replace")` 兜底；**不要改成 `encoding="utf-8"`**，那会让 PowerShell 管道输出变成乱码。
 

@@ -23,7 +23,7 @@ class DesignParams:
     # ------------------------------------------------------------------
     # 任务与总体
     # ------------------------------------------------------------------
-    takeoff_weight: float = 250_000.0
+    takeoff_weight: float = 85_000.0
     """起飞总重 W_TO, N（≈ 25.5 t）。
 
     注意：**可行域与总重无关** —— 约束分析在 (W/S, T/W) 平面上进行，总重只通过
@@ -31,10 +31,10 @@ class DesignParams:
     单独改本参数只会移动当前设计点，不会改变可行域的面积与形状。
     """
 
-    wing_area: float = 95.0
+    wing_area: float = 90.0
     """机翼参考面积 S, m²。与 ``takeoff_weight`` 共同决定当前设计点的翼载 W_TO/S。"""
 
-    takeoff_thrust: float = 90_000.0
+    takeoff_thrust: float = 68_000.0
     """海平面静止、最大油门下的安装推力 F0, N。
 
     与 ``takeoff_weight`` 共同确定「当前设计点」的推重比 ``T/W = F0/W_TO``。

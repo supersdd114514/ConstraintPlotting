@@ -79,13 +79,16 @@ def wing_loading_kgf_to_n(ws_kgf_m2: float | np.ndarray) -> float | np.ndarray:
     return np.asarray(ws_kgf_m2, dtype=float) * G0
 
 
-def wing_loading_n_to_kgf(ws_n_m2: float | np.ndarray) -> float | np.ndarray:
-    """翼载 N/m² → 9.8 N/m²(kgf/m²)。"""
-    return np.asarray(ws_n_m2, dtype=float) / G0
-
-
 def wing_loading_n_to_kg(ws_n_m2: float | np.ndarray) -> float | np.ndarray:
-    """翼载 N/m² → kg/m²（仅供展示，不用于公式计算）。"""
+    """翼载 N/m² → kg/m²（即 kgf/m²）。
+
+    ``kg/m²`` 与 ``N/m²`` 相差 **g = 9.80665 倍，不是 10 倍** —— 这是本项目最易出错之处。
+
+    本函数同时服务于两件语义一致的事，因此**不再另设** ``*_to_kgf`` 别名：
+
+    1. 把翼载换算到参考文献所用的单位（李为吉 表 2.9 的 9.8 N/m²、刘虎 表 3.2 的 kg/m²）；
+    2. 在图表副轴与终端报告中展示。
+    """
     return np.asarray(ws_n_m2, dtype=float) / G0
 
 

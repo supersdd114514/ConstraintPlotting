@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from core.units import wing_loading_n_to_kgf
+from core.units import wing_loading_n_to_kg
 
 from .base import ConstraintKind, ConstraintMeta, register_constraint
 
@@ -54,7 +54,7 @@ def compute(params, ws: np.ndarray) -> np.ndarray:
     if params.ld_takeoff <= 0.0:
         raise ValueError("起飞滑跑距离约束：ld_takeoff 必须为正")
 
-    ws_kgf = wing_loading_n_to_kgf(np.asarray(ws, dtype=float))
+    ws_kgf = wing_loading_n_to_kg(np.asarray(ws, dtype=float))
 
     coefficient = 1.2 / (params.cl_max_takeoff * params.takeoff_ground_run)
     lift_drag_term = 0.5 * (3.0 * params.ground_friction_mu + 1.0 / params.ld_takeoff)
